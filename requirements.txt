@@ -3,6 +3,7 @@ uvicorn
 python-dotenv
 motor
 pydantic
+python-multipart
 
 pymongo
 passlib
