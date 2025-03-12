@@ -272,6 +272,8 @@ async def get_user(username: str):
 @app.post("/register/")
 async def register(user: UserCreate):
     """Register a new user (only if not already registered)."""
+    print("Received data:", user.dict())  # Debugging
+    
     if user.username not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail="Invalid role. Choose from manager, employee, or admin.")
 
@@ -280,10 +282,17 @@ async def register(user: UserCreate):
         raise HTTPException(status_code=400, detail="User already registered.")
 
     hashed_password = pwd_context.hash(user.password)
-    new_user = {"username": user.username, "password": hashed_password}
+    
+    new_user = {
+        "username": user.username,
+        "password": hashed_password,
+        "email": user.email,
+        "phonenumber": user.phonenumber
+    }
 
     await users_collection.insert_one(new_user)
     return {"message": "User registered successfully!"}
+
 
 @app.post("/login/")
 async def login(user: UserLogin):
