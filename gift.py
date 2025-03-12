@@ -258,6 +258,8 @@ ALLOWED_ROLES = {"manager", "employee", "admin"}
 class UserCreate(BaseModel):
     username: str  # Role-based username (manager, employee, admin)
     password: str
+    email: str
+    phonenumber: int
 
 class UserLogin(BaseModel):
     username: str
@@ -295,3 +297,51 @@ async def login(user: UserLogin):
 
     return {"message": f"Login successful for {user.username}!"}
 
+#api to update profile
+@app.get("/api/profile/{username}")
+async def get_user_profile(username: str):
+    try:
+        user = await users_collection.find_one({"username": username}, {"_id": 0, "email": 1, "phone": 1, "firstname": 1})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return user  # Return fetched details
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching user profile: {str(e)}")
+
+@app.post("/api/profile/update")
+async def update_profile(
+    username: str = Form(...),
+    firstname: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(...),
+    lastname: str = Form(...),
+    address: str = Form(...),
+    designation: str = Form(...)
+):
+    try:
+        # Check if user exists
+        user = await users_collection.find_one({"username": username})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Create the complete employee profile
+        employee_data = {
+            "username": username,
+            "firstname": firstname,
+            "lastname": lastname,
+            "email": email,
+            "phone": phone,
+            "address": address,
+            "designation": designation,
+            "created_at": datetime.now().isoformat()
+        }
+
+        # Store in employees collection
+        await db["employees"].insert_one(employee_data)
+
+        return {"message": "Profile updated successfully!", "employee_data": employee_data}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating profile: {str(e)}")
