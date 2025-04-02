@@ -4,6 +4,7 @@ python-dotenv
 motor
 pydantic
 python-multipart
+python-jose[cryptography]
 
 pymongo
 passlib

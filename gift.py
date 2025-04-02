@@ -1,15 +1,18 @@
-from fastapi import FastAPI, Form, HTTPException , Query, Depends
+
+from fastapi import FastAPI, Form, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os , traceback
+import os
 from dotenv import load_dotenv
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 from pymongo import MongoClient
 from pydantic import BaseModel
 from typing import List
 from collections import defaultdict
 from passlib.context import CryptContext
+from jose import JWTError, jwt 
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 # Load environment variables
 load_dotenv()
@@ -249,63 +252,84 @@ async def get_gift_redemption_report():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching redemption report: {str(e)}")
 
-# Password Hashing
+SECRET_KEY = "a3f1d2e4c6b8a7d9e0f1c2b3d4a5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# Allowed Roles
-ALLOWED_ROLES = {"manager", "employee", "admin"}
-
+# Models
 class UserCreate(BaseModel):
-    username: str  # Role-based username (manager, employee, admin)
-    password: str
-    email: str
-    phonenumber: int
-
-class UserLogin(BaseModel):
     username: str
     password: str
+    email: str
+    phone: str
+    role: str
 
-async def get_user(username: str):
-    """Fetch user from MongoDB by username."""
-    return await users_collection.find_one({"username": username})
+class UserProfile(BaseModel):
+    username: str
+    email: str
+    phone: str
+    role: str
 
-@app.post("/register/")
+# Helper Functions
+def hash_password(password: str):
+    return pwd_context.hash(password)
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict, expires_delta: timedelta):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + expires_delta
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = await users_collection.find_one({"username": username})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+# Register API
+@app.post("/register")
 async def register(user: UserCreate):
-    """Register a new user (only if not already registered)."""
-    print("Received data:", user.dict())  # Debugging
-    
-    if user.username not in ALLOWED_ROLES:
-        raise HTTPException(status_code=400, detail="Invalid role. Choose from manager, employee, or admin.")
-
-    existing_user = await get_user(user.username)
+    existing_user = await users_collection.find_one({"username": user.username})
     if existing_user:
-        raise HTTPException(status_code=400, detail="User already registered.")
-
-    hashed_password = pwd_context.hash(user.password)
+        raise HTTPException(status_code=400, detail="Username already taken")
     
-    new_user = {
-        "username": user.username,
-        "password": hashed_password,
-        "email": user.email,
-        "phonenumber": user.phonenumber
+    hashed_password = hash_password(user.password)
+    user_dict = user.dict()
+    user_dict["password"] = hashed_password
+    await users_collection.insert_one(user_dict)
+    return {"message": "User registered successfully"}
+
+# Login API
+@app.post("/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = await users_collection.find_one({"username": form_data.username})
+    if not user or not verify_password(form_data.password, user["password"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    access_token = create_access_token(data={"sub": user["username"]}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    return {"access_token": access_token, "token_type": "bearer"}
+
+# Profile API
+@app.get("/profile", response_model=UserProfile)
+async def profile(user: dict = Depends(get_current_user)):
+    return {
+        "username": user["username"],
+        "email": user["email"],
+        "phone": user["phone"],
+        "role": user["role"]
     }
-
-    await users_collection.insert_one(new_user)
-    return {"message": "User registered successfully!"}
-
-
-@app.post("/login/")
-async def login(user: UserLogin):
-    """Verify user login."""
-    existing_user = await get_user(user.username)
-    if not existing_user:
-        raise HTTPException(status_code=400, detail="User not found. Please register first.")
-
-    if not pwd_context.verify(user.password, existing_user["password"]):
-        raise HTTPException(status_code=401, detail="Invalid password.")
-
-    return {"message": f"Login successful for {user.username}!"}
-
 #api to update profile
 @app.get("/api/profile/{username}")
 async def get_user_profile(username: str):
