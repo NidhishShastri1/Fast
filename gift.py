@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from bson import ObjectId
 from datetime import datetime, timedelta
 from pymongo import MongoClient
-from pydantic import BaseModel , Emailstr
+from pydantic import BaseModel , EmailStr
 from typing import List
 from collections import defaultdict
 from passlib.context import CryptContext
@@ -262,7 +262,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 class UserCreate(BaseModel):
     username: str
     password: str
-    email: Emailstr
+    email: EmailStr
     phone: str
     role: str
 
