@@ -262,7 +262,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 class UserCreate(BaseModel):
     username: str
     password: str
-    email: str
+    email: Emailstr
     phone: str
     role: str
 
