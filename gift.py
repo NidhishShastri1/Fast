@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from bson import ObjectId
 from datetime import datetime, timedelta
 from pymongo import MongoClient
-from pydantic import BaseModel
+from pydantic import BaseModel , Emailstr
 from typing import List
 from collections import defaultdict
 from passlib.context import CryptContext
